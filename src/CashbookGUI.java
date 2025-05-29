@@ -1,129 +1,109 @@
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 
 public class CashbookGUI extends JFrame {
-    private JTextField serialNoField;
-    private JTextField dateField;
-    private JTextField particularsField;
-    private JTextField ledgerFolioField;
-    private JTextField salesDiscountField;
-    private JTextField purchaseDiscountField;
-    private JTextField cashField;
-    private JTextField bankField;
-    private JComboBox<String> typeComboBox;
-    private JTextArea outputArea;
-    private List<Entry> entries;
+    private final DefaultTableModel tableModel;
+    private final JTable table;
+    private final List<Entry> entries;
 
-    public CashbookGUI() {
-        entries = new ArrayList<>();
+    public CashbookGUI(List<Entry> entries) {
+        this.entries = entries;
         setTitle("Cashbook Application");
-        setSize(400, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLayout(new GridLayout(0, 2));
+        setSize(800, 400);
+        setLocationRelativeTo(null);
 
-        add(new JLabel("Type (receipt/payment):"));
-        typeComboBox = new JComboBox<>(new String[]{"receipt", "payment"});
-        add(typeComboBox);
+        String[] columns = {"Date", "Type", "Particulars", "SalesDisc", "PurchDisc", "Cash", "Bank"};
+        tableModel = new DefaultTableModel(columns, 0);
+        table = new JTable(tableModel);
+        refreshTable();
 
-        add(new JLabel("Serial No:"));
-        serialNoField = new JTextField();
-        add(serialNoField);
+        JScrollPane scrollPane = new JScrollPane(table);
 
-        add(new JLabel("Date (YYYY-MM-DD):"));
-        dateField = new JTextField();
-        add(dateField);
+        JButton addReceiptBtn = new JButton("Add Receipt");
+        JButton addPaymentBtn = new JButton("Add Payment");
+        JButton exportBtn = new JButton("Export to CSV");
+        JButton refreshBtn = new JButton("Refresh");
 
-        add(new JLabel("Particulars:"));
-        particularsField = new JTextField();
-        add(particularsField);
+        addReceiptBtn.addActionListener(e -> showEntryDialog("receipt"));
+        addPaymentBtn.addActionListener(e -> showEntryDialog("payment"));
+        exportBtn.addActionListener(e -> ExCSV.exportToCSV(entries));
+        refreshBtn.addActionListener(e -> refreshTable());
 
-        add(new JLabel("Ledger Folio (LF):"));
-        ledgerFolioField = new JTextField();
-        add(ledgerFolioField);
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(addReceiptBtn);
+        buttonPanel.add(addPaymentBtn);
+        buttonPanel.add(exportBtn);
+        buttonPanel.add(refreshBtn);
 
-        add(new JLabel("Sales Discount:"));
-        salesDiscountField = new JTextField();
-        add(salesDiscountField);
-
-        add(new JLabel("Purchase Discount:"));
-        purchaseDiscountField = new JTextField();
-        add(purchaseDiscountField);
-
-        add(new JLabel("Cash:"));
-        cashField = new JTextField();
-        add(cashField);
-
-        add(new JLabel("Bank:"));
-        bankField = new JTextField();
-        add(bankField);
-
-        JButton addButton = new JButton("Add Entry");
-        addButton.addActionListener(new AddEntryAction());
-        add(addButton);
-
-        JButton exportButton = new JButton("Export to CSV");
-        exportButton.addActionListener(new ExportCSVAction());
-        add(exportButton);
-
-        outputArea = new JTextArea();
-        outputArea.setEditable(false);
-        add(new JScrollPane(outputArea));
-
-        setVisible(true);
+        add(scrollPane, BorderLayout.CENTER);
+        add(buttonPanel, BorderLayout.SOUTH);
     }
 
-    private class AddEntryAction implements ActionListener {
-        @Override
-        public void actionPerformed(ActionEvent e) {
+    private void showEntryDialog(String type) {
+        JTextField dateField = new JTextField();
+        JTextField particularsField = new JTextField();
+        JTextField salesDiscField = new JTextField("0");
+        JTextField purchDiscField = new JTextField("0");
+        JTextField cashField = new JTextField();
+        JTextField bankField = new JTextField();
+
+        JPanel panel = new JPanel(new GridLayout(0, 2));
+        panel.add(new JLabel("Date (e.g., 23-May-2025):"));
+        panel.add(dateField);
+        panel.add(new JLabel("Particulars:"));
+        panel.add(particularsField);
+        if (type.equals("receipt")) {
+            panel.add(new JLabel("Sales Discount:"));
+            panel.add(salesDiscField);
+        } else {
+            panel.add(new JLabel("Purchase Discount:"));
+            panel.add(purchDiscField);
+        }
+        panel.add(new JLabel("Cash:"));
+        panel.add(cashField);
+        panel.add(new JLabel("Bank:"));
+        panel.add(bankField);
+
+        int result = JOptionPane.showConfirmDialog(this, panel, "Add " + type.substring(0, 1).toUpperCase() + type.substring(1),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+        if (result == JOptionPane.OK_OPTION) {
             try {
-                String type = (String) typeComboBox.getSelectedItem();
-                int serialNo = Integer.parseInt(serialNoField.getText());
-                LocalDate date = LocalDate.parse(dateField.getText());
+                LocalDate date = CashbookApp.parseFlexibleDate(dateField.getText());
                 String particulars = particularsField.getText();
-                String ledgerFolio = ledgerFolioField.getText();
-                double salesDiscount = type.equals("receipt") ? Double.parseDouble(salesDiscountField.getText()) : 0;
-                double purchaseDiscount = type.equals("payment") ? Double.parseDouble(purchaseDiscountField.getText()) : 0;
+                double salesDiscount = type.equals("receipt") ? Double.parseDouble(salesDiscField.getText()) : 0;
+                double purchaseDiscount = type.equals("payment") ? Double.parseDouble(purchDiscField.getText()) : 0;
                 double cash = Double.parseDouble(cashField.getText());
                 double bank = Double.parseDouble(bankField.getText());
 
-                Entry entry = new Entry(serialNo, date, particulars, ledgerFolio, salesDiscount, purchaseDiscount, cash, bank, type);
+                Entry entry = new Entry(date, particulars, salesDiscount, purchaseDiscount, cash, bank, type);
                 entries.add(entry);
-                outputArea.append("Entry added: " + entry.toCSV() + "\n");
-                clearFields();
+                refreshTable();
+                JOptionPane.showMessageDialog(this, "Entry added successfully.");
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(CashbookGUI.this, "Error adding entry: " + ex.getMessage());
+                JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage(), "Input Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
 
-private class ExportCSVAction implements ActionListener {
-    @Override
-    public void actionPerformed(ActionEvent e) {
-        JFileChooser fileChooser = new JFileChooser();
-        if (fileChooser.showSaveDialog(CashbookGUI.this) == JFileChooser.APPROVE_OPTION) {
-            String filePath = fileChooser.getSelectedFile().getAbsolutePath();
-            CSVUtils.exportEntriesToCSV(entries, filePath);
-            JOptionPane.showMessageDialog(CashbookGUI.this, "CSV exported to: " + filePath);
+    private void refreshTable() {
+        tableModel.setRowCount(0);
+        for (Entry e : entries) {
+            tableModel.addRow(new Object[]{
+                    e.date, e.type, e.particulars, e.salesDiscount, e.purchaseDiscount, e.cash, e.bank
+            });
         }
-    }
-}
-    private void clearFields() {
-        serialNoField.setText("");
-        dateField.setText("");
-        particularsField.setText("");
-        ledgerFolioField.setText("");
-        salesDiscountField.setText("");
-        purchaseDiscountField.setText("");
-        cashField.setText("");
-        bankField.setText("");
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(CashbookGUI::new);
+        ExCSV.loadEntries(CashbookApp.entries);
+        SwingUtilities.invokeLater(() -> {
+            CashbookGUI gui = new CashbookGUI(CashbookApp.entries);
+            gui.setVisible(true);
+        });
     }
 }
